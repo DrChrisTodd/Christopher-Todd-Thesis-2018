@@ -1,0 +1,86 @@
+##plotting DNase subsets 
+
+setwd('~/todd/DHS/subsets/ES_TS')
+
+#location of DNase files
+DNase.files = '~/todd/Data/DNase_peaks/ENCODE_DNase/'
+
+#Bed file
+bed = read.delim('~/todd/Data/Output/ROI_coord.txt')
+
+
+#Classes of interest
+class.list<-c("ESC_REDE","ESC_NonEnh","ESC_NEDE","TSC_REDE","TSC_NonEnh","TSC_NEDE")
+
+#Tissues of interest
+dnase.order=c("ES_ATAC","ES_DNase","ES-E14","WW6","ZHBTc4-mESC","break","TS_ATAC","TS_DNase")
+#dnase.order=c("ES_ATAC","break","TS_ATAC","break","wu_2cell_early","wu_2cell","wu_4cell","wu_8cell","wu_icm","break","Smith_Blastocyst","break","Smith_Epiblast","break","Smith_ExE")
+
+
+#Load functions and path to bedtools
+source('~/todd/Functions/intersectBed.R')
+bedtools='~/bedtools2/bin/'
+library(ComplexHeatmap,lib= '~/Rpackages/')
+library(circlize,lib= '~/Rpackages/')
+
+
+
+DNase.bedfiles = list.files(path=DNase.files,pattern=paste(dnase.order,collapse="|"))
+
+
+##Getting logical value for each DNase dataset for if peaks overlap with each element in the class
+DNase.log=list()
+for(n in 1:length(DNase.bedfiles)){
+  intersect.bed = intersectBed(bed[,c(1,7:8,4)],read.delim(paste(DNase.files,DNase.bedfiles[n],sep=""),h=F),opt.string='-c -F 0.1',path.to.bedtools=bedtools)
+#  intersect.bed = intersectBed(bed[,c(1,7:8,4)],read.delim(paste(DNase.files,DNase.bedfiles[n],sep=""),h=F),opt.string='-c ',path.to.bedtools=bedtools)
+  
+   DNase.log[[n]]=intersect.bed[,ncol(intersect.bed)]>0}
+
+##putting this logical value into a matrix and setting col and row names
+num = lapply(DNase.log, as.numeric)
+mat = matrix(unlist(num),ncol=length(num))
+rownames(mat)<-bed[,4]
+colnames(mat)<-DNase.bedfiles
+
+
+
+###Pooling tissue replicates into single columns###
+
+col.split<-strsplit(colnames(mat),split = "_ENCFF")
+name<-unlist(lapply(X = col.split,FUN = function(x){x[[1]]}))
+colnames(mat)<-name
+
+#taking mean of logical values to get measure of in how many replicates for each tissue is this element associated with a DNAse peak 
+agg.list<-list()
+for(i in 1:nrow(mat)){
+  mat.row<-mat[i,]
+  agg<-aggregate(x = unlist(mat.row),list(colnames(mat)),mean)
+  agg.list[[i]]<-t(agg$x)}
+tog<-do.call(rbind,agg.list)
+
+#replacing the lost col and row names again
+agg<-aggregate(unlist(mat[1,]),list(colnames(mat)),mean)
+colnames(tog)<-agg$Group.1
+rownames(tog)<-rownames(mat)
+
+draw.heatmap = function(input.mat,name,width=4,height=10,col) {
+  ##saturation point for the heatmap
+  sat=0.5
+  ##make heatmap object
+  colramp = colorRamp2(c(0,sat),c('white',col))
+  hm.plot= Heatmap(input.mat,cluster_rows=T,cluster_columns=F,
+                   show_row_names=F,show_row_dend = FALSE,show_column_names=F,show_heatmap_legend=F,col=colramp)
+  jpeg(paste(name,'heatmap.jpg',sep='_'),w=width,h=height,units='in',res=600)
+  draw(hm.plot)
+  dev.off()
+}
+
+for(i in 1:length(class.list)){
+  class.bed = bed[bed[,9] %in% class.list[i],c(1,7:8,4)]
+  class.mat = tog[row.names(tog) %in% class.bed[,4],]
+  class.mat2 = class.mat[,match(dnase.order,colnames(class.mat))]
+  class.mat3 = cbind(rownames(class.mat2),class.mat2)
+  colnames(class.mat3)[1]<-"ID"
+  write.table(class.mat3,paste(class.list[i],"_DNAse.txt",sep=""),quote=F,col.names = T,row.names = F,sep="\t")
+  draw.heatmap(input.mat = class.mat2,name = paste(class.list[i],"_DNase",sep=""),col='green')
+}

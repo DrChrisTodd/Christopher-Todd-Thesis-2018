@@ -1,0 +1,10 @@
+class	in.gene	out.gene
+ESC_REDE	1	633
+ESC_noclass	27	5945
+TSC_REDE	3	355
+TSC_noclass	4	2398
+ESC_NEDE	42	1946
+TSC_NEDE	7	312
+ESC_NonEnh	8	1260
+TSC_NonEnh	1	715
+Rand	153	13504
